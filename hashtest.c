@@ -3,6 +3,11 @@
 #else
 #define XHASH HASH
 #endif
+#if EXT
+#define XEXT(macro, params) macro##_EXTDEF params; macro##_EXTREF params;
+#else
+#define XEXT(macro, params) macro params;
+#endif
 #define _H__(a, b) b##_##a
 #define _H_(a, b) _H__(a, b)
 #define _H(a) _H_(a, XHASH)
@@ -22,9 +27,9 @@ static __inline unsigned long s2s_hash(const struct s2s_entry *);
 __attribute__((unused))
 static __inline char s2s_null(const struct s2s_entry *);
 #if CLOSED
-CHASH_PARAMS(s2s, s2s_entry, s2s_hash, s2s_eq, s2s_null);
+XEXT(CHASH_PARAMS, (s2s, s2s_entry, s2s_hash, s2s_eq, s2s_null))
 #else
-HASH_PARAMS(s2s, s2s_entry, he, s2s_hash, s2s_eq);
+XEXT(HASH_PARAMS, (s2s, s2s_entry, he, s2s_hash, s2s_eq))
 #endif
 
 

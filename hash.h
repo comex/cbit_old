@@ -25,16 +25,10 @@ typedef void *_h_ptr;
 #define _HASH_INLINE 
 #endif
 
-#define _HASH_DEF(body) { body; }
-#define _HASH_REF(body) ;
-#define _HASH_BODY void) 0;
-#define _HASH_BODY_END ((void) 0
-
 #define _HASH_COMMON_BITS(head_struct, alloc_size, foreach_safe, t_ty, set, \
-                          func_decl, body) \
+                          func_decl) \
     func_decl size_t \
-    head_struct##__hash_suggested_size(const struct head_struct *head) \
-    body((_HASH_BODY { \
+    head_struct##__hash_suggested_size(const struct head_struct *head) { \
         if(head->hh_count * 4 < head->hh_nbuckets) { \
             size_t result = head->hh_count * 2 + 1; \
             if(result < 5) result = 5; \
@@ -44,12 +38,11 @@ typedef void *_h_ptr;
         } else { \
             return head->hh_nbuckets; \
         } \
-    } _HASH_BODY_END)) \
+    } \
     func_decl _h_ptr * \
     head_struct##__hash_resize(struct head_struct *head, \
                                void *buf, \
-                               size_t nbuckets) \
-    body((_HASH_BODY { \
+                               size_t nbuckets) { \
         struct head_struct old = *head; \
         head_struct##__hash_entry *entry; \
         t_ty t; \
@@ -62,13 +55,12 @@ typedef void *_h_ptr;
             } \
         } \
         return (_h_ptr *) old.hh_buckets; \
-    } _HASH_BODY_END)) \
+    } \
     func_decl char \
     head_struct##__hash_resize_alloc(struct head_struct *head, \
                                      void *(*allocator)(size_t), \
                                      void (*deallocator)(void *), \
-                                     size_t nbuckets) \
-    body((_HASH_BODY { \
+                                     size_t nbuckets) { \
         void *buf; \
         if(nbuckets == head->hh_nbuckets) \
             return 0; \
@@ -79,8 +71,21 @@ typedef void *_h_ptr;
         } else { \
             return 0; \
         } \
-    } _HASH_BODY_END)) \
+    } \
     typedef int head_struct##__hash_allow_final_semicolon
+
+#define _HASH_COMMON_BITS_EXTREF(head_struct) \
+    extern size_t \
+    head_struct##__hash_suggested_size(const struct head_struct *head); \
+    extern _h_ptr * \
+    head_struct##__hash_resize(struct head_struct *head, \
+                               void *buf, \
+                               size_t nbuckets); \
+    extern char \
+    head_struct##__hash_resize_alloc(struct head_struct *head, \
+                                     void *(*allocator)(size_t), \
+                                     void (*deallocator)(void *), \
+                                     size_t nbuckets)
 
 #define HASH_HEAD(head_struct) \
     struct head_struct { \
@@ -94,12 +99,25 @@ typedef void *_h_ptr;
         _h_ptr he_next; \
     }
 
-#define HASH_PARAMS(head_struct, entry_struct, entry_field, hash_func, eq_func) \
+#define HASH_PARAMS(head_struct, entry_struct, entry_field, \
+                    hash_func, eq_func) \
+    HASH_PARAMS_(head_struct, entry_struct, entry_field, \
+                 hash_func, eq_func, \
+                 static _HASH_INLINE)
+
+#define HASH_PARAMS_EXTDEF(head_struct, entry_struct, entry_field, \
+                           hash_func, eq_func) \
+    HASH_PARAMS_(head_struct, entry_struct, entry_field, \
+                 hash_func, eq_func, \
+                 extern)
+
+#define HASH_PARAMS_(head_struct, entry_struct, entry_field, \
+                     hash_func, eq_func, \
+                     func_decl) \
     typedef struct entry_struct head_struct##__hash_entry; \
     func_decl head_struct##__hash_entry * \
     head_struct##__hash_seek(const struct head_struct *head, \
-                             size_t idx) \
-    body((_HASH_BODY { \
+                             size_t idx) { \
         _h_ptr result; \
         for(; idx < HASH_NBUCKETS(head); idx++) { \
             result = head->hh_buckets[idx]; \
@@ -107,22 +125,20 @@ typedef void *_h_ptr;
                 return (head_struct##__hash_entry *) result; \
         } \
         return NULL; \
-    } _HASH_BODY_END)) \
+    } \
     static _HASH_INLINE head_struct##__hash_entry * \
     head_struct##__hash_next(const struct head_struct *head, \
-                             const head_struct##__hash_entry *entry) \
-    body((_HASH_BODY { \
+                             const head_struct##__hash_entry *entry) { \
         _h_ptr next = entry->entry_field.he_next; \
         return ((size_t) next & 1) ? \
             head_struct##__hash_seek(head, (size_t) next >> 1) : \
             (head_struct##__hash_entry *) next; \
-    } _HASH_BODY_END)) \
+    } \
     func_decl head_struct##__hash_entry * \
     head_struct##__hash_lookup(struct head_struct *head, \
                                const head_struct##__hash_entry *proto, \
                                char remove, \
-                               char add) \
-    body((_HASH_BODY { \
+                               char add) { \
         head_struct##__hash_entry *entry; \
         _h_ptr next, *nextp; \
         size_t hash; \
@@ -155,12 +171,25 @@ typedef void *_h_ptr;
             } \
         } \
         return NULL; \
-    } _HASH_BODY_END)) \
+    } \
     _HASH_COMMON_BITS(head_struct, \
                       HASH_ALLOC_SIZE, \
                       HASH_FOREACH_SAFE, \
                       head_struct##__hash_entry *, \
-                      HASH_SET) \
+                      HASH_SET, \
+                      func_decl) \
+
+#define HASH_PARAMS_EXTREF(head_struct, entry_struct, entry_field, \
+                           hash_func, eq_func) \
+    extern struct entry_struct * \
+    head_struct##__hash_seek(const struct head_struct *head, \
+                             size_t idx); \
+    extern struct entry_struct * \
+    head_struct##__hash_lookup(struct head_struct *head, \
+                               const head_struct##__hash_entry *proto, \
+                               char remove, \
+                               char add); \
+    _HASH_COMMON_BITS_EXTREF(head_struct)
 
 #define HASH_INIT(head) \
     /* initialize to an empty hash */ \
@@ -233,29 +262,22 @@ typedef void *_h_ptr;
                      hash_func, eq_func, null_func) \
     CHASH_PARAMS_(head_struct, entry_struct, \
                   hash_func, eq_func, null_func, \
-                  static _HASH_INLINE, _HASH_DEF)
+                  static _HASH_INLINE)
                   
 #define CHASH_PARAMS_EXTDEF(head_struct, entry_struct, \
                             hash_func, eq_func, null_func) \
     CHASH_PARAMS_(head_struct, entry_struct, \
                   hash_func, eq_func, null_func, \
-                  extern, _HASH_DEF)
-
-#define CHASH_PARAMS_EXTREF(head_struct, entry_struct, \
-                            hash_func, eq_func, null_func) \
-    CHASH_PARAMS_(head_struct, entry_struct, \
-                  hash_func, eq_func, null_func, \
-                  extern, _HASH_REF)
+                  extern)
 
 #define CHASH_PARAMS_(head_struct, entry_struct, \
                       hash_func, eq_func, null_func, \
-                      func_decl, body) \
+                      func_decl) \
     typedef struct entry_struct head_struct##__hash_entry; \
     func_decl head_struct##__hash_entry * \
     head_struct##__hash_lookup(const struct head_struct *head, \
-                          const head_struct##__hash_entry *proto, \
-                          char mode) \
-    body((_HASH_BODY { \
+                               const head_struct##__hash_entry *proto, \
+                               char mode) { \
         size_t hash, i, nbuckets = CHASH_NBUCKETS(head); \
         head_struct##__hash_entry \
             *bucket, *oldbucket, \
@@ -290,11 +312,10 @@ typedef void *_h_ptr;
             oldbucket = bucket; \
         } \
         return bucket; \
-    } _HASH_BODY_END)) \
+    } \
     func_decl head_struct##__hash_entry * \
     head_struct##__hash_next_by_idx(const struct head_struct *head, \
-                               size_t idx) \
-    body((_HASH_BODY { \
+                               size_t idx) { \
         size_t nbuckets = (head)->hh_nbuckets; \
         head_struct##__hash_entry *bucket = \
             &((head_struct##__hash_entry *) head->hh_buckets)[idx]; \
@@ -303,7 +324,7 @@ typedef void *_h_ptr;
                 return bucket; \
         } \
         return NULL; \
-    } _HASH_BODY_END)) \
+    } \
     static _HASH_INLINE head_struct##__hash_entry * \
     head_struct##__hash_next(const struct head_struct *head, \
                         const head_struct##__hash_entry *elm) { \
@@ -315,9 +336,18 @@ typedef void *_h_ptr;
                       CHASH_FOREACH_SAFE, \
                       size_t, \
                       CHASH_SET, \
-                      func_decl, \
-                      body)
+                      func_decl)
 
+#define CHASH_PARAMS_EXTREF(head_struct, entry_struct, \
+                            hash_func, eq_func, null_func) \
+    extern struct entry_struct * \
+    head_struct##__hash_lookup(const struct head_struct *head, \
+                               const head_struct##__hash_entry *proto, \
+                               char mode); \
+    extern struct entry_struct * \
+    head_struct##__hash_next_by_idx(const struct head_struct *head, \
+                                    size_t id); \
+    _HASH_COMMON_BITS_EXTREF(head_struct)
                           
 #define CHASH_HEAD_INITIALIZER HASH_HEAD_INITIALIZER
 
