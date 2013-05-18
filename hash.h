@@ -8,6 +8,9 @@
    without uintptr_t or C99 long long, there is no way to avoid a
    potential compiler warning about casting to a shorter integer type.
    So try to use uintptr_t. */
+#if HASH_FORCE_VP_HASH_PTR
+typedef void *_hash_ptr;
+#else
 #if defined(_MSC_VER)
 typedef uintptr_t _hash_ptr;
 #elif __STDC_VERSION__ >= 199901L || defined(__GNUC__)
@@ -15,6 +18,7 @@ typedef uintptr_t _hash_ptr;
 typedef uintptr_t _hash_ptr;
 #else
 typedef void *_hash_ptr;
+#endif
 #endif
 
 #if defined(__GNUC__) || defined(_MSC_VER)
@@ -126,7 +130,7 @@ typedef void *_hash_ptr;
         _hash_ptr result; \
         for (; idx < HASH_NBUCKETS(head); idx++) { \
             result = head->hh_buckets[idx]; \
-            if (result && !(result & 1)) \
+            if (result && !((size_t) result & 1)) \
                 return (head_struct##__hash_entry *) result; \
         } \
         return NULL; \

@@ -41,7 +41,8 @@ for compiler in clang++ g++ g++-mp-4.8; do
     for mode in "-x c -ansi" \
                 "-x c -std=c99" \
                 "-x c -std=gnu99" \
-                "-x c++ -std=c++98"; do
+                "-x c++ -std=c++98" \
+                "-x c -ansi -DHASH_FORCE_VP_HASH_PTR=1"; do
         for closed in 1 0; do \
             for ext in 1 0; do
                 x="$compiler $mode -DCLOSED=$closed -DEXT=$ext -Wall -Wextra -Werror -o hashtest hashtest.c"
