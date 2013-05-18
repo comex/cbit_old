@@ -6,10 +6,38 @@ mia=fey
 {
 foo=derp
 mia=fey
-}"
+}
+{
+foo=derp
+mia=fey
+}
+{
+foo=derp
+mia=fey
+}
+{
+mia=fey
+}
+{
+mia=fey
+}
+n{
+foo=derp
+mia=fey
+} 2
+n{
+foo=derp
+mia=fey
+} 2
+n{
+mia=fey
+} 1
+n{
+mia=fey
+} 1"
 
 
-for compiler in clang++ g++; do
+for compiler in clang++ g++ g++-mp-4.8; do
     for mode in "-x c -ansi" \
                 "-x c -std=c99" \
                 "-x c -std=gnu99" \
