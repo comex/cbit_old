@@ -9,12 +9,12 @@
    potential compiler warning about casting to a shorter integer type.
    So try to use uintptr_t. */
 #if defined(_MSC_VER)
-typedef uintptr_t _h_ptr;
+typedef uintptr_t _hash_ptr;
 #elif __STDC_VERSION__ >= 199901L || defined(__GNUC__)
 #include <stdint.h>
-typedef uintptr_t _h_ptr;
+typedef uintptr_t _hash_ptr;
 #else
-typedef void *_h_ptr;
+typedef void *_hash_ptr;
 #endif
 
 #if defined(__GNUC__) || defined(_MSC_VER)
@@ -43,7 +43,7 @@ typedef void *_h_ptr;
             return head->hh_nbuckets; \
         } \
     } \
-    func_decl _h_ptr * \
+    func_decl _hash_ptr * \
     head_struct##__hash_resize(struct head_struct *head, \
                                void *buf, \
                                size_t nbuckets) { \
@@ -51,7 +51,7 @@ typedef void *_h_ptr;
         head_struct##__hash_entry *entry; \
         t_ty t; \
         head->hh_nbuckets = nbuckets; \
-        head->hh_buckets = (_h_ptr *) buf; \
+        head->hh_buckets = (_hash_ptr *) buf; \
         head->hh_count = 0; \
         memset(buf, 0, alloc_size(nbuckets, head_struct)); \
         if (old.hh_nbuckets) { \
@@ -59,7 +59,7 @@ typedef void *_h_ptr;
                 set(head, entry, head_struct); \
             } \
         } \
-        return (_h_ptr *) old.hh_buckets; \
+        return (_hash_ptr *) old.hh_buckets; \
     } \
     func_decl char \
     head_struct##__hash_resize_alloc(struct head_struct *head, \
@@ -82,7 +82,7 @@ typedef void *_h_ptr;
 #define _HASH_COMMON_BITS_EXTREF(head_struct) \
     extern size_t \
     head_struct##__hash_suggested_size(const struct head_struct *head); \
-    extern _h_ptr * \
+    extern _hash_ptr * \
     head_struct##__hash_resize(struct head_struct *head, \
                                void *buf, \
                                size_t nbuckets); \
@@ -96,12 +96,12 @@ typedef void *_h_ptr;
     struct head_struct { \
         size_t hh_count; \
         size_t hh_nbuckets; \
-        _h_ptr *hh_buckets; \
+        _hash_ptr *hh_buckets; \
     }
 
 #define HASH_ENTRY(head_struct) \
     struct { \
-        _h_ptr he_next; \
+        _hash_ptr he_next; \
     }
 
 #define HASH_PARAMS(head_struct, entry_struct, entry_field, \
@@ -123,7 +123,7 @@ typedef void *_h_ptr;
     func_decl head_struct##__hash_entry * \
     head_struct##__hash_seek(const struct head_struct *head, \
                              size_t idx) { \
-        _h_ptr result; \
+        _hash_ptr result; \
         for (; idx < HASH_NBUCKETS(head); idx++) { \
             result = head->hh_buckets[idx]; \
             if (result && !(result & 1)) \
@@ -134,7 +134,7 @@ typedef void *_h_ptr;
     func_decl head_struct##__hash_entry * \
     head_struct##__hash_next(const struct head_struct *head, \
                              const head_struct##__hash_entry *entry) { \
-        _h_ptr next = entry->entry_field.he_next; \
+        _hash_ptr next = entry->entry_field.he_next; \
         return ((size_t) next & 1) ? \
             head_struct##__hash_seek(head, (size_t) next >> 1) : \
             (head_struct##__hash_entry *) next; \
@@ -146,17 +146,17 @@ typedef void *_h_ptr;
                                char add) { \
         struct head_struct *head = (struct head_struct *) _head; \
         head_struct##__hash_entry *entry; \
-        _h_ptr next, *nextp; \
+        _hash_ptr next, *nextp; \
         size_t hash; \
         if (!HASH_NBUCKETS(head)) return NULL; \
         hash = (hash_func)(proto) % HASH_NBUCKETS(head); \
         nextp = &head->hh_buckets[hash]; \
         next = *nextp; \
         if (next == 0) \
-            next = (_h_ptr) ((hash << 1) + 3); \
+            next = (_hash_ptr) ((hash << 1) + 3); \
         if (add) { \
-            *nextp = (_h_ptr) proto; \
-            nextp = (_h_ptr *) &proto->entry_field.he_next; \
+            *nextp = (_hash_ptr) proto; \
+            nextp = (_hash_ptr *) &proto->entry_field.he_next; \
             *nextp = next; \
             head->hh_count++; \
         } \
@@ -253,7 +253,7 @@ typedef void *_h_ptr;
     head_struct##__hash_lookup(head, proto, 1, 0)
 
 #define HASH_ALLOC_SIZE(nbuckets, head_struct) \
-    (sizeof(_h_ptr) * (nbuckets))
+    (sizeof(_hash_ptr) * (nbuckets))
 
 #define HASH_RESIZE(head, buckets, nbuckets, head_struct) \
     head_struct##__hash_resize(head, buckets, nbuckets)
