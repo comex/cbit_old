@@ -575,4 +575,5 @@ typedef void *_h_ptr;
                     _NHASH_FOREACH(key, value, head, _nhash_entry, \
                                    head_struct, \
                                    head_struct##__nhash_entry *_nhash_entry)
+
 #endif
