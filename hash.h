@@ -47,7 +47,7 @@ typedef void *_hash_ptr;
             return head->hh_nbuckets; \
         } \
     } \
-    func_decl _hash_ptr * \
+    func_decl void * \
     head_struct##__hash_resize(struct head_struct *head, \
                                void *buf, \
                                size_t nbuckets) { \
@@ -72,7 +72,7 @@ typedef void *_hash_ptr;
                                      size_t nbuckets) { \
         void *buf; \
         if (nbuckets == head->hh_nbuckets) \
-            return 0; \
+            return 1; \
         buf = allocator(alloc_size(nbuckets, head_struct)); \
         if (buf) { \
             deallocator(head_struct##__hash_resize(head, buf, nbuckets)); \
@@ -86,7 +86,7 @@ typedef void *_hash_ptr;
 #define _HASH_COMMON_BITS_EXTREF(head_struct) \
     extern size_t \
     head_struct##__hash_suggested_size(const struct head_struct *head); \
-    extern _hash_ptr * \
+    extern void * \
     head_struct##__hash_resize(struct head_struct *head, \
                                void *buf, \
                                size_t nbuckets); \
@@ -107,6 +107,10 @@ typedef void *_hash_ptr;
     struct { \
         _hash_ptr he_next; \
     }
+
+/* Note that the callbacks supplied here are called without parentheses, so
+   they can be macros, but extra parentheses are required if the callback is,
+   e.g., a conditional expression. */
 
 #define HASH_PARAMS(head_struct, entry_struct, entry_field, \
                     hash_func, eq_func) \
@@ -153,7 +157,7 @@ typedef void *_hash_ptr;
         _hash_ptr next, *nextp; \
         size_t hash; \
         if (!HASH_NBUCKETS(head)) return NULL; \
-        hash = (hash_func)(proto) % HASH_NBUCKETS(head); \
+        hash = hash_func(proto) % HASH_NBUCKETS(head); \
         nextp = &head->hh_buckets[hash]; \
         next = *nextp; \
         if (next == 0) \
@@ -170,7 +174,7 @@ typedef void *_hash_ptr;
              next = *nextp) { \
             unsigned char cmp; \
             entry = (head_struct##__hash_entry *) next; \
-            cmp = (eq_func)(entry, proto); \
+            cmp = eq_func(entry, proto); \
             if (cmp) { \
                 if (remove) { \
                     next = entry->entry_field.he_next; \
@@ -280,6 +284,12 @@ typedef void *_hash_ptr;
 #define CHASH_BUCKETS(head, head_struct) \
     ((head_struct##__hash_entry *) ((head)->hh_buckets))
 
+/* null_func: Used to determine whether an entry is null/invalid and thus
+   represents the end of a search.  Unused buckets are zeroed, so an all-zero
+   value must be considered invalid, but typically it's possible to determine
+   whether an entry is invalid by checking a single field rather than comparing
+   the whole thing with zero. */
+
 #define CHASH_PARAMS(head_struct, entry_struct, \
                      hash_func, eq_func, null_func) \
     typedef struct entry_struct head_struct##__hash_entry; \
@@ -297,43 +307,47 @@ typedef void *_hash_ptr;
                       hash_func, eq_func, null_func, \
                       func_decl) \
     func_decl head_struct##__hash_entry * \
-    head_struct##__hash_lookup(const struct head_struct *head, \
+    head_struct##__hash_lookup(const struct head_struct *_head, \
                                const head_struct##__hash_entry *proto, \
                                char mode) { \
+        struct head_struct *head = (struct head_struct *) _head; \
         size_t hash, i, nbuckets = CHASH_NBUCKETS(head); \
         head_struct##__hash_entry \
             *bucket, *oldbucket, \
             *buckets = (head_struct##__hash_entry *) head->hh_buckets; \
         if (!nbuckets) \
             return NULL; \
-        hash = i = (hash_func)(proto) % nbuckets; \
+        hash = i = hash_func(proto) % nbuckets; \
         do { \
             bucket = &buckets[i]; \
-            if ((null_func)(bucket)) { \
-                if (mode == 1 /* add */) \
+            if (null_func(bucket)) { \
+                if (mode == 1 /* add */) { \
                     *bucket = *proto; \
+                    head->hh_count++; \
+                    return bucket; \
+                } \
                 return NULL; \
             } \
-            if ((eq_func)(bucket, proto)) { \
+            if (eq_func(bucket, proto)) { \
                 if (mode == 1 /* add */) \
                     *bucket = *proto; \
                 else if (mode == 2 /* remove */) \
                     goto copy_backward; \
                 return bucket; \
             } \
-        } while ((i = (i + 1) & (nbuckets - 1)) != hash); \
+        } while ((i = (i + 1) % nbuckets) != hash); \
         return NULL; \
     copy_backward: \
-        memset(bucket, 0, sizeof(*bucket)); \
         oldbucket = bucket; \
-        while ((i = (i + 1) & (nbuckets - 1)) != hash && \
-               !(null_func)(bucket = &buckets[i]) && \
-               (hash_func)(bucket) == hash) { \
+        while ((i = (i + 1) % nbuckets) != hash && \
+               !null_func(bucket = &buckets[i]) && \
+               hash_func(bucket) == hash) { \
             *oldbucket = *bucket; \
-            memset(bucket, 0, sizeof(*bucket)); \
             oldbucket = bucket; \
         } \
-        return bucket; \
+        memset(oldbucket, 0, sizeof(*oldbucket)); \
+        head->hh_count--; \
+        return NULL; \
     } \
     func_decl head_struct##__hash_entry * \
     head_struct##__hash_next_by_idx(const struct head_struct *head, \
@@ -372,6 +386,8 @@ typedef void *_hash_ptr;
     _HASH_COMMON_BITS_EXTREF(head_struct)
 
 #define CHASH_HEAD_INITIALIZER HASH_HEAD_INITIALIZER
+
+#define CHASH_INIT HASH_INIT
 
 #define CHASH_EMPTY HASH_EMPTY
 
@@ -436,21 +452,26 @@ typedef void *_hash_ptr;
                       hash_func, eq_func, \
                       func_decl) \
     _HASH_INLINE char \
+    head_struct##__nhash_null(const struct entry_struct *a) { \
+        return !a->es_key; \
+    } \
+    _HASH_INLINE char \
     head_struct##__nhash_eq(const struct entry_struct *a, \
                             const struct entry_struct *b) { \
-        return (eq_func)(a->es_key, b->es_key); \
+        return eq_func(a->es_key, b->es_key); \
     } \
     _HASH_INLINE size_t \
     head_struct##__nhash_hash(const struct entry_struct *a) { \
-        return (hash_func)(a->es_key); \
+        return hash_func(a->es_key); \
     } \
-    HASH_PARAMS(head_struct, entry_struct, es_entry, \
-                head_struct##__nhash_hash, head_struct##__nhash_eq); \
+    CHASH_PARAMS(head_struct, entry_struct, \
+                 head_struct##__nhash_hash, head_struct##__nhash_eq, \
+                 head_struct##__nhash_null); \
     func_decl struct head_struct * \
     head_struct##__nhash_alloc(void) { \
         struct head_struct *head = \
             (struct head_struct *) malloc(sizeof(*head)); \
-        HASH_INIT(head); \
+        CHASH_INIT(head); \
         return head; \
     } \
     func_decl value_ty \
@@ -458,37 +479,38 @@ typedef void *_hash_ptr;
                              key_ty key) { \
         struct entry_struct proto, *entry; \
         proto.es_key = key; \
-        entry = HASH_LOOKUP(head, &proto, head_struct); \
+        entry = CHASH_LOOKUP(head, &proto, head_struct); \
         return entry ? entry->es_value : 0; \
     } \
     func_decl void \
     head_struct##__nhash_set(struct head_struct *head, \
                              key_ty key, \
                              value_ty value) { \
-        struct entry_struct *entry = \
-            (struct entry_struct *) malloc(sizeof(*entry)); \
-        entry->es_key = key; \
-        entry->es_value = value; \
-        HASH_RESIZE_ALLOC(head, malloc, free, \
-                          HASH_SUGGESTED_SIZE(head, head_struct), \
-                          head_struct); \
-        free(HASH_SET(head, entry, head_struct)); \
+        struct entry_struct entry; \
+        entry.es_key = key; \
+        entry.es_value = value; \
+        if(!CHASH_RESIZE_ALLOC(head, malloc, free, \
+                               CHASH_SUGGESTED_SIZE(head, head_struct), \
+                               head_struct)) { \
+            abort(); \
+        } \
+        CHASH_SET(head, &entry, head_struct); \
     } \
     func_decl void \
     head_struct##__nhash_remove(struct head_struct *head, \
                                 key_ty key) { \
         struct entry_struct proto; \
         proto.es_key = key; \
-        free(HASH_REMOVE(head, &proto, head_struct)); \
+        CHASH_REMOVE(head, &proto, head_struct); \
     } \
     func_decl head_struct##__nhash_entry * \
     head_struct##__nhash_first(const struct head_struct *head) { \
-        return HASH_FIRST(head, head_struct); \
+        return CHASH_FIRST(head, head_struct); \
     } \
     func_decl head_struct##__nhash_entry * \
     head_struct##__nhash_next(const struct head_struct *head, \
                               const struct entry_struct *elm) { \
-        return HASH_NEXT(head, elm, head_struct); \
+        return CHASH_NEXT(head, elm, head_struct); \
     } \
     typedef int head_struct##__nhash_allow_final_semicolon
 
@@ -513,9 +535,8 @@ typedef void *_hash_ptr;
                               const struct entry_struct *elm) \
 
 #define _NHASH_DEFINE_STUFF(head_struct, entry_struct, key_ty, value_ty) \
-    HASH_HEAD(head_struct); \
+    CHASH_HEAD(head_struct); \
     struct entry_struct { \
-        HASH_ENTRY(head_struct) es_entry; \
         key_ty es_key; \
         value_ty es_value; \
     }; \
@@ -534,6 +555,8 @@ typedef void *_hash_ptr;
 
 #define NHASH_FREE(head, head_struct) \
     free(head)
+
+#define NHASH_EMPTY HASH_EMPTY
 
 #define NHASH_COUNT HASH_COUNT
 
@@ -558,9 +581,9 @@ typedef void *_hash_ptr;
 #define _NHASH_FOREACH(key, value, head, entry, head_struct, entry_decl) \
     for (entry_decl = NHASH_FIRST(head, head_struct); \
          (entry) && (key = NHASH_KEY(entry), \
-                     value = NHASH_VALUE(entry), \
-                     entry = NHASH_NEXT(head, entry, head_struct), \
-                     1);)
+                   value = NHASH_VALUE(entry), \
+                   1); \
+         (entry) = NHASH_NEXT(head, (entry), head_struct))
 
 /* Supports break and continue properly. */
 
