@@ -19,7 +19,8 @@ PP_UNWRAP2(prefix, prefix2, ctx, bits) (ditto)
 #define PP_CHOOSE(arg, nonempty, empty) PP_CHOOSE_P(PP_CHOOSE_C##arg empty, nonempty)
 #define PP_CHOOSE_C ,
 #define PP_CHOOSE_P_(_, func, ...) func
-#define PP_CHOOSE_P(...) PP_CHOOSE_P_(__VA_ARGS__)
+// note: PP_ID is required on MSVC
+#define PP_CHOOSE_P(...) PP_ID(PP_CHOOSE_P_(__VA_ARGS__))
 
 #define PP_ID(...) __VA_ARGS__
 #define PP_UNPAREN(bits) PP_ID bits
